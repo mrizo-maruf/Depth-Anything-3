@@ -6,6 +6,7 @@ import torch
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from scipy.spatial.transform import Rotation
+import yaml
 
 from depth_anything_3.api import DepthAnything3
 
@@ -364,8 +365,13 @@ def compute_rra_rta_auc(pred_c2w: np.ndarray, gt_c2w: np.ndarray,
     """
     if thresholds_rot is None:
         thresholds_rot = np.array([1, 2, 3, 5, 10, 20, 30])
+    else:
+        thresholds_rot = np.array(thresholds_rot)
+    
     if thresholds_trans is None:
         thresholds_trans = np.array([1, 2, 3, 5, 10, 20, 30])
+    else:
+        thresholds_trans = np.array(thresholds_trans)
     
     N = len(pred_c2w)
     
@@ -447,7 +453,9 @@ def compute_rra_rta_auc(pred_c2w: np.ndarray, gt_c2w: np.ndarray,
     }
 
 
-def evaluate_pose_metrics(pred_c2w: np.ndarray, gt_c2w: np.ndarray, align_mode='sim3'):
+def evaluate_pose_metrics(pred_c2w: np.ndarray, gt_c2w: np.ndarray, 
+                         align_mode='sim3', rpe_delta=1, 
+                         rra_thresholds=None, rta_thresholds=None, max_pairs=1000):
     """
     Compute all pose metrics: ATE, RPE, and RRA/RTA AUC.
     
@@ -455,6 +463,10 @@ def evaluate_pose_metrics(pred_c2w: np.ndarray, gt_c2w: np.ndarray, align_mode='
         pred_c2w: [N, 4, 4] predicted c2w poses
         gt_c2w: [N, 4, 4] ground truth c2w poses
         align_mode: 'sim3' or 'se3' for ATE alignment
+        rpe_delta: frame step size for RPE
+        rra_thresholds: rotation thresholds for RRA
+        rta_thresholds: translation thresholds for RTA
+        max_pairs: maximum pairs for RRA/RTA sampling
     
     Returns:
         dict with all pose metrics
@@ -471,11 +483,14 @@ def evaluate_pose_metrics(pred_c2w: np.ndarray, gt_c2w: np.ndarray, align_mode='
     else:
         aligned_pred, _, _ = align_trajectory_se3(pred_c2w, gt_c2w)
     
-    rpe_metrics = compute_rpe(aligned_pred, gt_c2w, delta=1)
+    rpe_metrics = compute_rpe(aligned_pred, gt_c2w, delta=rpe_delta)
     metrics.update(rpe_metrics)
     
     # RRA/RTA AUC
-    auc_metrics = compute_rra_rta_auc(aligned_pred, gt_c2w)
+    auc_metrics = compute_rra_rta_auc(aligned_pred, gt_c2w, 
+                                      thresholds_rot=rra_thresholds,
+                                      thresholds_trans=rta_thresholds,
+                                      max_pairs=max_pairs)
     metrics.update(auc_metrics)
     
     return metrics
@@ -550,9 +565,9 @@ def depth_metrics(pred_m: np.ndarray, gt_m: np.ndarray, mask: np.ndarray):
 
 
 # -------------------------
-# Main evaluation
+# Main evaluation (single scene)
 # -------------------------
-def evaluate_da3_depth_only(
+def evaluate_scene(
     rgb_dir: str,
     gt_depth_dir: str,
     gt_traj_path: str = None,
@@ -562,10 +577,15 @@ def evaluate_da3_depth_only(
     align_mode: str = "scale",  # "scale" or "scale_shift" for depth
     pose_align_mode: str = "sim3",  # "sim3" or "se3" for pose
     device: str = "cuda",
-    model_id: str = "/home/maribjonov_mr/Depth-Anything-3/DA3NESTED-GIANT-LARGE-1.1",
+    model: DepthAnything3 = None,
     save_visualizations: bool = True,
     results_dir: str = "results",
     evaluate_pose: bool = True,
+    max_frames: int = None,
+    rpe_delta: int = 1,
+    rra_thresholds: list = None,
+    rta_thresholds: list = None,
+    max_pairs: int = 1000,
 ):
     # 1) Collect files
     rgb_paths = sorted(glob.glob(os.path.join(rgb_dir, "*.jpg")))
@@ -576,13 +596,16 @@ def evaluate_da3_depth_only(
     if not depth_paths:
         raise ValueError(f"No GT depth .png files found in: {gt_depth_dir}")
     
-    rgb_paths = rgb_paths
-    depth_paths = depth_paths
+    # Limit frames if specified
+    if max_frames is not None:
+        rgb_paths = rgb_paths[:max_frames]
+        depth_paths = depth_paths[:max_frames]
+    
     # 2) Run DA3 inference (batch over list of image paths)
-    dev = torch.device(device)
-    model = DepthAnything3.from_pretrained(model_id).to(device=dev)
+    if model is None:
+        raise ValueError("Model must be provided")
 
-    prediction = model.inference(rgb_paths, process_res=1280)
+    prediction = model.inference(rgb_paths)
     pred_depth = prediction.depth  # [N,H,W] float32
 
     if isinstance(pred_depth, torch.Tensor):
@@ -596,7 +619,6 @@ def evaluate_da3_depth_only(
 
         pred_i = pred_depth[i]
         if pred_i.shape != gt_m.shape:
-            print(f"[WARNING]: pred_i.shape ({pred_i.shape}) != gt_m.shape ({gt_m.shape}):")
             pred_i = cv2.resize(
                 pred_i,
                 (gt_m.shape[1], gt_m.shape[0]),
@@ -631,7 +653,7 @@ def evaluate_da3_depth_only(
         if save_visualizations:
             frame_name = os.path.splitext(os.path.basename(dp))[0]
             save_path = save_depth_comparison(gt_m, pred_m, results_dir, frame_name)
-            print(f"Saved comparison: {save_path}")
+            # print(f"Saved comparison: {save_path}")
 
         m = depth_metrics(pred_m, gt_m, mask)
         m["frame"] = os.path.basename(dp)
@@ -653,7 +675,6 @@ def evaluate_da3_depth_only(
         # Load GT trajectory
         gt_c2w = load_traj_txt(gt_traj_path)
         print(f"Loaded GT trajectory with {len(gt_c2w)} poses")
-        gt_c2w = gt_c2w
         
         # Convert DA3 extrinsics (w2c [3,4]) to c2w [4,4]
         pred_extrinsics = prediction.extrinsics  # [N, 3, 4] w2c
@@ -667,64 +688,305 @@ def evaluate_da3_depth_only(
         pred_c2w = pred_c2w[:n_poses]
         
         # Compute pose metrics
-        pose_metrics = evaluate_pose_metrics(pred_c2w, gt_c2w, align_mode=pose_align_mode)
+        pose_metrics = evaluate_pose_metrics(pred_c2w, gt_c2w, 
+                                            align_mode=pose_align_mode,
+                                            rpe_delta=rpe_delta,
+                                            rra_thresholds=rra_thresholds,
+                                            rta_thresholds=rta_thresholds,
+                                            max_pairs=max_pairs)
         print(f"Evaluated {n_poses} poses")
 
     return avg, per_frame, pose_metrics
 
 
+# -------------------------
+# Multi-scene evaluation
+# -------------------------
+def evaluate_dataset(
+    dataset_dir: str,
+    scene_names: list = None,
+    png_depth_scale: float = 0.00015244,
+    min_depth_m: float = 1e-3,
+    max_depth_m: float = 200.0,
+    align_mode: str = "scale",
+    pose_align_mode: str = "sim3",
+    device: str = "cuda",
+    model_id: str = "/home/rizo/mipt_ccm/Depth-Anything-3/DA3-SMALL",
+    save_visualizations: bool = True,
+    results_dir: str = "results",
+    evaluate_pose: bool = True,
+    max_frames: int = None,
+    rpe_delta: int = 1,
+    rra_thresholds: list = None,
+    rta_thresholds: list = None,
+    max_pairs: int = 1000,
+):
+    """
+    Evaluate DA3 on multiple scenes in a dataset.
+    
+    Args:
+        dataset_dir: Path to dataset folder containing scene folders
+        scene_names: List of scene names to evaluate. If None or empty, evaluate all scenes
+        png_depth_scale: Scale factor for depth PNG files
+        min_depth_m: Minimum valid depth in meters
+        max_depth_m: Maximum valid depth in meters
+        align_mode: "scale" or "scale_shift" for depth alignment
+        pose_align_mode: "sim3" or "se3" for pose alignment
+        device: Device to run model on
+        model_id: Path to DA3 model
+        save_visualizations: Whether to save visualization images
+        results_dir: Directory to save results
+        evaluate_pose: Whether to evaluate pose metrics
+        max_frames: Maximum number of frames per scene (None for all)
+    
+    Returns:
+        dict: Results for each scene and overall average
+    """
+    # Get scene list
+    if scene_names is None or len(scene_names) == 0:
+        # Get all subdirectories in dataset_dir
+        all_items = os.listdir(dataset_dir)
+        scene_names = [
+            item for item in all_items 
+            if os.path.isdir(os.path.join(dataset_dir, item))
+        ]
+        scene_names = sorted(scene_names)
+        print(f"Found {len(scene_names)} scenes in dataset: {scene_names}")
+    else:
+        print(f"Evaluating {len(scene_names)} specified scenes: {scene_names}")
+    
+    if not scene_names:
+        raise ValueError(f"No scenes found in {dataset_dir}")
+    
+    # Load model once
+    dev = torch.device(device)
+    model = DepthAnything3.from_pretrained(model_id).to(device=dev)
+    print(f"Loaded model: {model_id}")
+    
+    # Evaluate each scene
+    all_results = {}
+    scene_metrics = []
+    
+    for scene_name in scene_names:
+        print(f"\n{'='*60}")
+        print(f"Evaluating scene: {scene_name}")
+        print(f"{'='*60}")
+        
+        scene_dir = os.path.join(dataset_dir, scene_name)
+        rgb_dir = os.path.join(scene_dir, "rgb")
+        depth_dir = os.path.join(scene_dir, "depth")
+        traj_path = os.path.join(scene_dir, "traj.txt")
+        
+        # Check if required directories exist
+        if not os.path.exists(rgb_dir):
+            print(f"WARNING: RGB directory not found: {rgb_dir}")
+            continue
+        if not os.path.exists(depth_dir):
+            print(f"WARNING: Depth directory not found: {depth_dir}")
+            continue
+        
+        # Check if trajectory exists
+        if not os.path.exists(traj_path):
+            print(f"WARNING: Trajectory file not found: {traj_path}")
+            traj_path = None
+        
+        # Create results directory for this scene
+        scene_results_dir = os.path.join(results_dir, scene_name)
+        
+        try:
+            avg, per_frame, pose_metrics = evaluate_scene(
+                rgb_dir=rgb_dir,
+                gt_depth_dir=depth_dir,
+                gt_traj_path=traj_path if evaluate_pose else None,
+                png_depth_scale=png_depth_scale,
+                min_depth_m=min_depth_m,
+                max_depth_m=max_depth_m,
+                align_mode=align_mode,
+                pose_align_mode=pose_align_mode,
+                device=device,
+                model=model,
+                save_visualizations=save_visualizations,
+                results_dir=scene_results_dir,
+                evaluate_pose=evaluate_pose and traj_path is not None,
+                max_frames=max_frames,
+                rpe_delta=rpe_delta,
+                rra_thresholds=rra_thresholds,
+                rta_thresholds=rta_thresholds,
+                max_pairs=max_pairs,
+            )
+            
+            all_results[scene_name] = {
+                'avg': avg,
+                'per_frame': per_frame,
+                'pose_metrics': pose_metrics,
+            }
+            scene_metrics.append(avg)
+            
+            print(f"\n✓ Scene '{scene_name}' completed: {len(per_frame)} frames evaluated")
+            
+        except Exception as e:
+            print(f"\n✗ Error evaluating scene '{scene_name}': {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    # Compute overall average across all scenes
+    if scene_metrics:
+        depth_keys = ["AbsRel", "SqRel", "RMSE", "RMSE_log", "log10", "delta1", "delta2", "delta3"]
+        overall_avg = {k: float(np.mean([s[k] for s in scene_metrics])) for k in depth_keys}
+        overall_avg["num_scenes"] = len(scene_metrics)
+        overall_avg["total_frames"] = sum(s["num_frames"] for s in scene_metrics)
+        
+        # Compute average pose metrics if available
+        pose_results = [r['pose_metrics'] for r in all_results.values() if r['pose_metrics']]
+        if pose_results:
+            pose_keys = list(pose_results[0].keys())
+            overall_pose = {k: float(np.mean([p[k] for p in pose_results])) for k in pose_keys}
+        else:
+            overall_pose = {}
+        
+        all_results['__overall__'] = {
+            'avg': overall_avg,
+            'pose_metrics': overall_pose,
+        }
+    else:
+        print("\nNo scenes were successfully evaluated!")
+        return None
+    
+    return all_results
+
+
+# -------------------------
+# Configuration loading
+# -------------------------
+def load_config(config_path: str = "metrics.yaml") -> dict:
+    """
+    Load configuration from YAML file.
+    
+    Args:
+        config_path: Path to YAML config file
+    
+    Returns:
+        dict: Configuration dictionary
+    """
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+    
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    return config
+
+
 if __name__ == "__main__":
-    rgb_dir = "/home/maribjonov_mr/3D_SSGG_IsaacSim/complex_1/rgb"         # e.g., dataset/rgb
-    gt_depth_dir = "/home/maribjonov_mr/3D_SSGG_IsaacSim/complex_1/depth"  # e.g., dataset/depth
-    gt_traj_path = "/home/maribjonov_mr/3D_SSGG_IsaacSim/complex_1/traj.txt"  # GT trajectory (c2w)
-
-    avg, per_frame, pose_metrics = evaluate_da3_depth_only(
-        rgb_dir=rgb_dir,
-        gt_depth_dir=gt_depth_dir,
-        gt_traj_path=gt_traj_path,
-        png_depth_scale=0.00015244,
-        min_depth_m=1e-3,
-        max_depth_m=200.0,
-        align_mode="scale",  # try "scale_shift" too
-        pose_align_mode="se3",  # or "se3" for no scale
-        device="cuda",
-        save_visualizations=True,
-        results_dir="results",
-        evaluate_pose=True,
+    # Load configuration from YAML file
+    config_path = "metrics.yaml"
+    config = load_config(config_path)
+    print(f"Loaded configuration from: {config_path}")
+    
+    # Extract parameters from config
+    dataset_config = config['dataset']
+    model_config = config['model']
+    depth_config = config['depth']
+    pose_config = config['pose']
+    output_config = config['output']
+    processing_config = config['processing']
+    
+    # Evaluate all scenes in dataset
+    all_results = evaluate_dataset(
+        dataset_dir=dataset_config['dataset_dir'],
+        scene_names=dataset_config['scene_names'],
+        png_depth_scale=depth_config['png_depth_scale'],
+        min_depth_m=depth_config['min_depth_m'],
+        max_depth_m=depth_config['max_depth_m'],
+        align_mode=depth_config['align_mode'],
+        pose_align_mode=pose_config['align_mode'],
+        device=model_config['device'],
+        model_id=model_config['model_id'],
+        save_visualizations=output_config['save_visualizations'],
+        results_dir=output_config['results_dir'],
+        evaluate_pose=pose_config['evaluate_pose'],
+        max_frames=processing_config['max_frames'],
+        rpe_delta=pose_config['rpe_delta'],
+        rra_thresholds=pose_config['rra_thresholds'],
+        rta_thresholds=pose_config['rta_thresholds'],
+        max_pairs=pose_config['max_pairs'],
     )
-
-    print("\n" + "=" * 60)
-    print("DEPTH METRICS (Average)")
-    print("=" * 60)
-    for k, v in avg.items():
-        print(f"{k:>15}: {v}")
     
-    if pose_metrics:
-        print("\n" + "=" * 60)
-        print("POSE METRICS")
-        print("=" * 60)
-        print("\n--- Absolute Trajectory Error (ATE) ---")
-        print(f"{'ATE_RMSE':>20}: {pose_metrics['ATE_RMSE']:.4f} m")
-        print(f"{'ATE_mean':>20}: {pose_metrics['ATE_mean']:.4f} m")
-        print(f"{'ATE_median':>20}: {pose_metrics['ATE_median']:.4f} m")
-        print(f"{'Scale':>20}: {pose_metrics['scale']:.4f}")
-        
-        print("\n--- Relative Pose Error (RPE) ---")
-        print(f"{'RPE_trans_RMSE':>20}: {pose_metrics['RPE_trans_RMSE']:.4f} m")
-        print(f"{'RPE_trans_mean':>20}: {pose_metrics['RPE_trans_mean']:.4f} m")
-        print(f"{'RPE_rot_RMSE':>20}: {pose_metrics['RPE_rot_RMSE']:.4f} deg")
-        print(f"{'RPE_rot_mean':>20}: {pose_metrics['RPE_rot_mean']:.4f} deg")
-        
-        print("\n--- Relative Accuracy (AUC) ---")
-        print(f"{'RRA_AUC':>20}: {pose_metrics['RRA_AUC']:.4f}")
-        print(f"{'RTA_AUC':>20}: {pose_metrics['RTA_AUC']:.4f}")
-        print(f"{'RRA@3deg':>20}: {pose_metrics['RRA@3deg']:.4f}")
-        print(f"{'RRA@30deg':>20}: {pose_metrics['RRA@30deg']:.4f}")
-        print(f"{'RTA@3deg':>20}: {pose_metrics['RTA@3deg']:.4f}")
-        print(f"{'RTA@30deg':>20}: {pose_metrics['RTA@30deg']:.4f}")
-        print(f"{'Num pairs':>20}: {pose_metrics['num_pairs']}")
+    if all_results is None:
+        print("\nNo results to display!")
+        exit(1)
     
-    print("\n" + "=" * 60)
-    print(f"Visualizations saved to: results/")
-    print(f"Total frames evaluated: {len(per_frame)}")
-    print("=" * 60)
+    # Prepare output text
+    output_lines = []
+    output_lines.append("\n" + "=" * 80)
+    output_lines.append("EVALUATION RESULTS")
+    output_lines.append("=" * 80)
+    
+    # Print per-scene results
+    for scene_name, result in all_results.items():
+        if scene_name == '__overall__':
+            continue
+        
+        output_lines.append(f"\n--- Scene: {scene_name} ---")
+        avg = result['avg']
+        pose_metrics = result['pose_metrics']
+        
+        output_lines.append("\nDepth Metrics:")
+        for k in ["AbsRel", "SqRel", "RMSE", "RMSE_log", "log10", "delta1", "delta2", "delta3"]:
+            if k in avg:
+                output_lines.append(f"  {k:>12}: {avg[k]:.6f}")
+        output_lines.append(f"  {'Frames':>12}: {avg.get('num_frames', 0)}")
+        
+        if pose_metrics:
+            output_lines.append("\nPose Metrics:")
+            output_lines.append(f"  {'ATE_RMSE':>12}: {pose_metrics['ATE_RMSE']:.4f} m")
+            output_lines.append(f"  {'RPE_trans':>12}: {pose_metrics['RPE_trans_RMSE']:.4f} m")
+            output_lines.append(f"  {'RPE_rot':>12}: {pose_metrics['RPE_rot_RMSE']:.4f} deg")
+            output_lines.append(f"  {'RRA_AUC':>12}: {pose_metrics['RRA_AUC']:.4f}")
+            output_lines.append(f"  {'RTA_AUC':>12}: {pose_metrics['RTA_AUC']:.4f}")
+    
+    # Print overall average
+    if '__overall__' in all_results:
+        output_lines.append("\n" + "=" * 80)
+        output_lines.append("OVERALL AVERAGE (across all scenes)")
+        output_lines.append("=" * 80)
+        
+        overall = all_results['__overall__']
+        avg = overall['avg']
+        pose_metrics = overall['pose_metrics']
+        
+        output_lines.append("\nDepth Metrics:")
+        for k in ["AbsRel", "SqRel", "RMSE", "RMSE_log", "log10", "delta1", "delta2", "delta3"]:
+            if k in avg:
+                output_lines.append(f"  {k:>12}: {avg[k]:.6f}")
+        output_lines.append(f"  {'Scenes':>12}: {avg.get('num_scenes', 0)}")
+        output_lines.append(f"  {'Total Frames':>12}: {avg.get('total_frames', 0)}")
+        
+        if pose_metrics:
+            output_lines.append("\nPose Metrics (Average):")
+            output_lines.append(f"  {'ATE_RMSE':>12}: {pose_metrics['ATE_RMSE']:.4f} m")
+            output_lines.append(f"  {'ATE_mean':>12}: {pose_metrics['ATE_mean']:.4f} m")
+            output_lines.append(f"  {'Scale':>12}: {pose_metrics['scale']:.4f}")
+            output_lines.append(f"  {'RPE_trans':>12}: {pose_metrics['RPE_trans_RMSE']:.4f} m")
+            output_lines.append(f"  {'RPE_rot':>12}: {pose_metrics['RPE_rot_RMSE']:.4f} deg")
+            output_lines.append(f"  {'RRA_AUC':>12}: {pose_metrics['RRA_AUC']:.4f}")
+            output_lines.append(f"  {'RTA_AUC':>12}: {pose_metrics['RTA_AUC']:.4f}")
+            output_lines.append(f"  {'RRA@3deg':>12}: {pose_metrics['RRA@3deg']:.4f}")
+            output_lines.append(f"  {'RRA@30deg':>12}: {pose_metrics['RRA@30deg']:.4f}")
+    
+    output_lines.append("\n" + "=" * 80)
+    output_lines.append(f"Results saved to: {output_config['results_dir']}/")
+    output_lines.append("=" * 80)
+    
+    # Print to console
+    output_text = "\n".join(output_lines)
+    print(output_text)
+    
+    # Save to file
+    os.makedirs(output_config['results_dir'], exist_ok=True)
+    metrics_file = os.path.join(output_config['results_dir'], "metrics_output.txt")
+    with open(metrics_file, 'w') as f:
+        f.write(output_text)
+    
+    print(f"\nMetrics saved to: {metrics_file}")

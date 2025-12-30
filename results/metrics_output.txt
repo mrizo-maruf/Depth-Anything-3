@@ -1,0 +1,235 @@
+
+================================================================================
+EVALUATION RESULTS
+================================================================================
+
+--- Scene: complex_1 ---
+
+Depth Metrics:
+        AbsRel: 0.005978
+         SqRel: 0.004370
+          RMSE: 0.132665
+      RMSE_log: 0.031021
+         log10: 0.002532
+        delta1: 0.996291
+        delta2: 0.998475
+        delta3: 0.999636
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0040 m
+     RPE_trans: 0.2739 m
+       RPE_rot: 0.0694 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 1.0000
+
+--- Scene: complex_nav_1 ---
+
+Depth Metrics:
+        AbsRel: 0.009296
+         SqRel: 0.006500
+          RMSE: 0.187509
+      RMSE_log: 0.037455
+         log10: 0.004032
+        delta1: 0.994172
+        delta2: 0.998333
+        delta3: 0.999520
+        Frames: 30
+
+Pose Metrics:
+      ATE_RMSE: 0.0057 m
+     RPE_trans: 0.4542 m
+       RPE_rot: 0.0841 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9978
+
+--- Scene: complex_nav_simple ---
+
+Depth Metrics:
+        AbsRel: 0.013954
+         SqRel: 0.009916
+          RMSE: 0.220302
+      RMSE_log: 0.063282
+         log10: 0.006713
+        delta1: 0.976651
+        delta2: 0.992662
+        delta3: 0.999413
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0042 m
+     RPE_trans: 0.6151 m
+       RPE_rot: 0.0609 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9998
+
+--- Scene: nav_scene_1 ---
+
+Depth Metrics:
+        AbsRel: 0.011797
+         SqRel: 0.008652
+          RMSE: 0.214249
+      RMSE_log: 0.050727
+         log10: 0.005423
+        delta1: 0.982608
+        delta2: 0.997868
+        delta3: 0.999355
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0033 m
+     RPE_trans: 0.6321 m
+       RPE_rot: 0.0733 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9998
+
+--- Scene: nav_scene_2 ---
+
+Depth Metrics:
+        AbsRel: 0.008156
+         SqRel: 0.007185
+          RMSE: 0.225534
+      RMSE_log: 0.040145
+         log10: 0.003608
+        delta1: 0.994374
+        delta2: 0.997647
+        delta3: 0.999119
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0045 m
+     RPE_trans: 0.3331 m
+       RPE_rot: 0.0822 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9999
+
+--- Scene: nav_scene_3 ---
+
+Depth Metrics:
+        AbsRel: 0.009474
+         SqRel: 0.006767
+          RMSE: 0.184994
+      RMSE_log: 0.038925
+         log10: 0.004067
+        delta1: 0.993268
+        delta2: 0.997856
+        delta3: 0.999718
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0056 m
+     RPE_trans: 0.3304 m
+       RPE_rot: 0.0824 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9998
+
+--- Scene: nav_scene_4 ---
+
+Depth Metrics:
+        AbsRel: 0.014994
+         SqRel: 0.011580
+          RMSE: 0.201801
+      RMSE_log: 0.065362
+         log10: 0.006914
+        delta1: 0.980917
+        delta2: 0.992059
+        delta3: 0.998955
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0039 m
+     RPE_trans: 0.7074 m
+       RPE_rot: 0.0947 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9997
+
+--- Scene: nav_scene_5 ---
+
+Depth Metrics:
+        AbsRel: 0.010292
+         SqRel: 0.010368
+          RMSE: 0.196318
+      RMSE_log: 0.054535
+         log10: 0.005020
+        delta1: 0.989280
+        delta2: 0.994303
+        delta3: 0.998145
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0039 m
+     RPE_trans: 0.2948 m
+       RPE_rot: 0.0838 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9997
+
+--- Scene: nav_scene_6 ---
+
+Depth Metrics:
+        AbsRel: 0.019829
+         SqRel: 0.015136
+          RMSE: 0.223332
+      RMSE_log: 0.098949
+         log10: 0.010375
+        delta1: 0.969220
+        delta2: 0.976832
+        delta3: 0.992140
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0057 m
+     RPE_trans: 0.2472 m
+       RPE_rot: 0.0835 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9993
+
+--- Scene: simple_1 ---
+
+Depth Metrics:
+        AbsRel: 0.003063
+         SqRel: 0.000828
+          RMSE: 0.050836
+      RMSE_log: 0.013814
+         log10: 0.001296
+        delta1: 0.999018
+        delta2: 0.999702
+        delta3: 0.999983
+        Frames: 20
+
+Pose Metrics:
+      ATE_RMSE: 0.0049 m
+     RPE_trans: 0.5039 m
+       RPE_rot: 0.0670 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9999
+
+================================================================================
+OVERALL AVERAGE (across all scenes)
+================================================================================
+
+Depth Metrics:
+        AbsRel: 0.010683
+         SqRel: 0.008130
+          RMSE: 0.183754
+      RMSE_log: 0.049421
+         log10: 0.004998
+        delta1: 0.987580
+        delta2: 0.994574
+        delta3: 0.998598
+        Scenes: 10
+  Total Frames: 210
+
+Pose Metrics (Average):
+      ATE_RMSE: 0.0046 m
+      ATE_mean: 0.0041 m
+         Scale: 1.2734
+     RPE_trans: 0.4392 m
+       RPE_rot: 0.0781 deg
+       RRA_AUC: 1.0000
+       RTA_AUC: 0.9996
+      RRA@3deg: 1.0000
+     RRA@30deg: 1.0000
+
+================================================================================
+Results saved to: results/
+================================================================================

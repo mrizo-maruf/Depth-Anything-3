@@ -1,0 +1,42 @@
+# Metrics Evaluation Configuration
+
+# Dataset configuration
+dataset:
+  dataset_dir: "/home/maribjonov_mr/3D_SSGG_IsaacSim"  # Parent folder containing scene folders
+  scene_names: []  # Empty list = evaluate all scenes. Or specify: ["scene_complex", "scene_simple"]
+  # ["complex_1", "complex_nav_1", "complex_nav_simple", "nav_scene_1", "nav_scene_2"]
+  # "nav_scene_1", "nav_scene_2", "nav_scene_3"
+# Model configuration
+model:
+  model_id: "/home/maribjonov_mr/Depth-Anything-3/DA3NESTED-GIANT-LARGE-1.1"  # Path to DA3 model (SMALL, BASE, LARGE, GIANT)
+  device: "cuda"  # "cuda" or "cpu"
+
+# Depth parameters
+depth:
+  png_depth_scale: 0.00015244  # Scale factor for Isaac Sim depth PNG files (uint16 to meters)
+  min_depth_m: 0.01  # Minimum valid depth in meters (1mm)
+  max_depth_m: 10.0  # Maximum valid depth in meters
+  align_mode: "scale"  # "scale" or "scale_shift" - how to align predicted depth to GT
+
+# Pose parameters
+pose:
+  evaluate_pose: true  # Whether to evaluate pose metrics (requires traj.txt)
+  align_mode: "sim3"  # "sim3" (with scale) or "se3" (without scale)
+  
+  # RPE settings
+  rpe_delta: 1  # Frame step size for RPE (1 = consecutive frames)
+  
+  # RRA/RTA AUC settings
+  rra_thresholds: [1, 2, 3, 5, 10, 20, 30]  # Rotation thresholds in degrees
+  rta_thresholds: [1, 2, 3, 5, 10, 20, 30]  # Translation angle thresholds in degrees
+  max_pairs: 1000  # Maximum number of pose pairs to sample for RRA/RTA
+
+# Output settings
+output:
+  save_visualizations: true  # Save side-by-side depth comparison images
+  results_dir: "results"  # Directory to save results
+  
+# Processing settings
+processing:
+  max_frames: null  # Maximum frames per scene (null = all frames, or set number like 10 for testing)
+  batch_size: null  # Future: batch size for inference (currently not used)
